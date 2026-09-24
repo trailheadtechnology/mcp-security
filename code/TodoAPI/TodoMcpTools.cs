@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
+using TodoAPI.Auth;
 using TodoMcp.Shared;
 
 [McpServerToolType]
@@ -16,6 +17,7 @@ public static class TodoMcpTools
         return JsonSerializer.Serialize(todos);
     }
 
+    [RequiresScope("Todos.Write")]
     [McpServerTool]
     [Description("Add a single todo to the todo list.")]
     public static string AddTodo([Description("The title of the todo to add")] string title)
@@ -24,6 +26,7 @@ public static class TodoMcpTools
         return JsonSerializer.Serialize(added);
     }
 
+    [RequiresScope("Todos.Write")]
     [McpServerTool]
     [Description("Add multiple todos at once. Use this when the user wants to add several items. Provide a JSON array of title strings.")]
     public static string AddMultipleTodos([Description("JSON array of todo titles, e.g. [\"Buy milk\", \"Walk dog\", \"Send email\"]")] string titlesJson)
@@ -33,6 +36,7 @@ public static class TodoMcpTools
         return JsonSerializer.Serialize(addedTodos);
     }
 
+    [RequiresScope("Todos.Write")]
     [McpServerTool, Description("Mark a todo item as complete.")]
     public static string MarkTodoComplete([Description("The ID of the todo to mark as complete")] int id)
     {
@@ -44,6 +48,7 @@ public static class TodoMcpTools
         return JsonSerializer.Serialize(new { success = true, todo = updated });
     }
 
+    [RequiresScope("Todos.Write")]
     [McpServerTool]
     [Description("Mark a todo item as incomplete (not done).")]
     public static string MarkTodoIncomplete([Description("The ID of the todo to mark as incomplete")] int id)

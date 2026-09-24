@@ -37,6 +37,7 @@ public static class EntraAuthExtensions
             .AddJwtBearer(options =>
             {
                 options.Authority = entra.Issuer;
+                options.MapInboundClaims = false; // keep Entra's claim names (scp, oid, roles) as-is
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     // Entra issues v1 or v2 tokens depending on the app manifest's requestedAccessTokenVersion.
@@ -47,13 +48,15 @@ public static class EntraAuthExtensions
             })
             // On 401, tells MCP clients where to find the protected resource metadata (RFC 9728),
             // and serves that metadata at /.well-known/oauth-protected-resource.
-            .AddMcp(options =>
+            // Same as .AddMcp(...), but with a challenge that starts the user off with read-only consent.
+            .AddScheme<McpAuthenticationOptions, ProgressiveMcpAuthenticationHandler>(
+                McpAuthenticationDefaults.AuthenticationScheme, McpAuthenticationDefaults.DisplayName, options =>
             {
                 options.ResourceMetadata = new()
                 {
                     Resource = $"{serverUrl}/mcp",
                     AuthorizationServers = { serverUrl }, // our shim, which fronts Entra
-                    ScopesSupported = [entra.Scope],
+                    ScopesSupported = [entra.ReadScope, entra.WriteScope],
                 };
             });
 
@@ -65,6 +68,9 @@ public static class EntraAuthExtensions
     {
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseWhen(
+            context => context.Request.Path.StartsWithSegments("/mcp"),
+            mcp => mcp.UseMiddleware<StepUpMiddleware>($"{serverUrl}/.well-known/oauth-protected-resource/mcp"));
         app.MapEntraAuthShim(serverUrl);
         return app;
     }

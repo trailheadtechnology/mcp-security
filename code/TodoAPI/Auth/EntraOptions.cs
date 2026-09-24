@@ -8,13 +8,18 @@ public sealed class EntraOptions
     public string TenantId { get; set; } = "";
     public string ClientId { get; set; } = "";
 
-    /// <summary>The scope exposed on the app registration ("Expose an API" in the portal).</summary>
-    public string ScopeName { get; set; } = "Todos.Access";
+    /// <summary>Scopes exposed on the app registration ("Expose an API" in the portal).</summary>
+    public string ReadScopeName { get; set; } = "Todos.Read";
+    public string WriteScopeName { get; set; } = "Todos.Write";
 
     public string Issuer => $"https://login.microsoftonline.com/{TenantId}/v2.0";
     public string AuthorizeEndpoint => $"https://login.microsoftonline.com/{TenantId}/oauth2/v2.0/authorize";
     public string TokenEndpoint => $"https://login.microsoftonline.com/{TenantId}/oauth2/v2.0/token";
-    public string Scope => $"api://{ClientId}/{ScopeName}";
+
+    /// <summary>Requests use fully-qualified scopes (api://{client-id}/Todos.Read); the token's scp claim holds the short names.</summary>
+    public string ScopeUri(string scopeName) => $"api://{ClientId}/{scopeName}";
+    public string ReadScope => ScopeUri(ReadScopeName);
+    public string WriteScope => ScopeUri(WriteScopeName);
 
     public void Validate()
     {

@@ -41,3 +41,4 @@ app.MapMcp("/mcp")
 app.MapEndpoints();
 
 await app.RunAsync();
+public partial class Program;

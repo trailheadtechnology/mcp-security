@@ -73,7 +73,7 @@ public static class EntraAuthShim
             token_endpoint = $"{serverUrl}/token",
             registration_endpoint = $"{serverUrl}/register",
             jwks_uri = $"https://login.microsoftonline.com/{options.Value.TenantId}/discovery/v2.0/keys",
-            scopes_supported = new[] { options.Value.Scope },
+            scopes_supported = new[] { options.Value.ReadScope, options.Value.WriteScope },
             response_types_supported = new[] { "code" },
             grant_types_supported = new[] { "authorization_code", "refresh_token" },
             code_challenge_methods_supported = new[] { "S256" },
