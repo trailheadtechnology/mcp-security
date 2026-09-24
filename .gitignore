@@ -52,3 +52,6 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+# Slide decks: publish slides.pdf, keep the .pptx source out of the repo
+*.pptx
+~$*
