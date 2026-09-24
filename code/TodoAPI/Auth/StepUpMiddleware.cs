@@ -77,3 +77,15 @@ public sealed class StepUpMiddleware(
         }
     }
 }
+
+public static class StepUpExtensions
+{
+    /// <summary>Runs step-up checks on /mcp. Must come after UseEntraOAuth (it needs the authenticated user).</summary>
+    public static WebApplication UseStepUpAuthorization(this WebApplication app, string serverUrl)
+    {
+        app.UseWhen(
+            context => context.Request.Path.StartsWithSegments("/mcp"),
+            mcp => mcp.UseMiddleware<StepUpMiddleware>($"{serverUrl}/.well-known/oauth-protected-resource/mcp"));
+        return app;
+    }
+}

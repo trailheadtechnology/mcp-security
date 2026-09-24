@@ -15,6 +15,7 @@ namespace TodoAPI.Tests;
 /// <summary>
 /// Progressive auth, without Entra: tokens are signed locally with a test key that replaces Entra's signing keys.
 /// Values match appsettings.json so the server's issuer/audience checks still run for real.
+/// These describe the finished demo: uncomment every "// DEMO:" line in Program.cs before running them (see DEMO.md).
 /// </summary>
 public class StepUpTests(StepUpTests.Factory factory) : IClassFixture<StepUpTests.Factory>
 {

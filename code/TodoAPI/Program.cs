@@ -33,9 +33,14 @@ app.UseSwaggerUI();
 // OAuth: authentication middleware + the endpoints MCP clients use to discover and register
 app.UseEntraOAuth(ServerUrl);
 
+// DEMO: Step-up auth. Write tools ([RequiresScope]) answer 403 insufficient_scope until the user consents to Todos.Write.
+//app.UseStepUpAuthorization(ServerUrl);
+
 // MCP HTTP endpoint
-app.MapMcp("/mcp")
-    .RequireAuthorization();
+var mcp = app.MapMcp("/mcp");
+
+// DEMO: Lock the door. No token, no MCP.
+//mcp.RequireAuthorization();
 
 // REST endpoints
 app.MapEndpoints();

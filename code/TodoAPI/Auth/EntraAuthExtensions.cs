@@ -68,9 +68,6 @@ public static class EntraAuthExtensions
     {
         app.UseAuthentication();
         app.UseAuthorization();
-        app.UseWhen(
-            context => context.Request.Path.StartsWithSegments("/mcp"),
-            mcp => mcp.UseMiddleware<StepUpMiddleware>($"{serverUrl}/.well-known/oauth-protected-resource/mcp"));
         app.MapEntraAuthShim(serverUrl);
         return app;
     }
