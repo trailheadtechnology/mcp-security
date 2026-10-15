@@ -16,10 +16,16 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Add MCP server with HTTP transport
-builder.Services
+var mcpServer = builder.Services
     .AddMcpServer()
     .WithHttpTransport()
-    .WithToolsFromAssembly();
+    .WithToolsFromAssembly()
+    .AddAuthorizationFilters(); // honors [Authorize] on tools: hides them from tools/list and blocks calls
+builder.Services.AddSingleton<TenantResolver>();
+
+// DEMO 3 (audit): Log every tool call. See DEMO.md.
+// Before: server terminal is silent. After: one AUDIT line per call, with who, what, and ALLOWED or DENIED.
+//mcpServer.WithAuditLog();
 
 // OAuth: protect the MCP endpoint with Entra ID (see Auth/ and appsettings.json)
 builder.AddEntraOAuth(ServerUrl);
@@ -33,13 +39,16 @@ app.UseSwaggerUI();
 // OAuth: authentication middleware + the endpoints MCP clients use to discover and register
 app.UseEntraOAuth(ServerUrl);
 
-// DEMO: Step-up auth. Write tools ([RequiresScope]) answer 403 insufficient_scope until the user consents to Todos.Write.
+// DEMO (extra, no slide): Step-up auth. See DEMO.md.
+// Before: a Todos.Read token can still add todos. After: write tools answer 403 insufficient_scope
+// and Claude Code asks the user to consent to Todos.Write, then retries.
 //app.UseStepUpAuthorization(ServerUrl);
 
 // MCP HTTP endpoint
 var mcp = app.MapMcp("/mcp");
 
-// DEMO: Lock the door. No token, no MCP.
+// DEMO 1: Lock the door. See DEMO.md.
+// Before: anyone can call the tools. After: 401 → Claude Code finds the metadata → Entra sign-in → token.
 //mcp.RequireAuthorization();
 
 // REST endpoints

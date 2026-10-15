@@ -9,13 +9,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
+using TodoMcp.Shared;
 
 namespace TodoAPI.Tests;
 
 /// <summary>
-/// Progressive auth, without Entra: tokens are signed locally with a test key that replaces Entra's signing keys.
+/// Progressive auth, role-based tool lists, tenants, and the audit log, without Entra: tokens are signed locally with a test key that replaces Entra's signing keys.
 /// Values match appsettings.json so the server's issuer/audience checks still run for real.
-/// These describe the finished demo: uncomment every "// DEMO:" line in Program.cs before running them (see DEMO.md).
+/// These describe the finished demo: uncomment every "// DEMO" toggle before running them (see DEMO.md).
 /// </summary>
 public class StepUpTests(StepUpTests.Factory factory) : IClassFixture<StepUpTests.Factory>
 {
@@ -24,12 +25,17 @@ public class StepUpTests(StepUpTests.Factory factory) : IClassFixture<StepUpTest
     private const string ReadScope = $"api://{ClientId}/Todos.Read";
     private const string WriteScope = $"api://{ClientId}/Todos.Write";
 
+    private const string ContosoGroup = "contoso-group-id";
+    private const string FabrikamGroup = "fabrikam-group-id";
+
     private static readonly SymmetricSecurityKey TestKey = new(Encoding.UTF8.GetBytes(new string('k', 64)));
 
     public sealed class Factory : WebApplicationFactory<Program>
     {
-        protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder) =>
-            builder.ConfigureTestServices(services =>
+        protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder) => builder
+            .UseSetting("Tenants:contoso", ContosoGroup)
+            .UseSetting("Tenants:fabrikam", FabrikamGroup)
+            .ConfigureTestServices(services =>
                 services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
                 {
                     options.Configuration = new OpenIdConnectConfiguration { Issuer = $"https://login.microsoftonline.com/{TenantId}/v2.0" };
@@ -70,7 +76,7 @@ public class StepUpTests(StepUpTests.Factory factory) : IClassFixture<StepUpTest
     [Fact]
     public async Task Read_only_token_can_call_read_tool()
     {
-        var response = await PostMcp(Token("Todos.Read"), ToolsCall("get_todos"));
+        var response = await PostMcp(Token("Todos.Read"), ToolsCall("get_todos", """{"tenantId":"contoso"}"""));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -78,7 +84,7 @@ public class StepUpTests(StepUpTests.Factory factory) : IClassFixture<StepUpTest
     [Fact]
     public async Task Read_only_token_calling_write_tool_gets_step_up_challenge()
     {
-        var response = await PostMcp(Token("Todos.Read"), ToolsCall("add_todo", """{"title":"Buy milk"}"""));
+        var response = await PostMcp(Token("Todos.Read"), ToolsCall("add_todo", """{"tenantId":"contoso","title":"Buy milk"}"""));
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         var challenge = response.Headers.WwwAuthenticate.ToString();
@@ -90,7 +96,7 @@ public class StepUpTests(StepUpTests.Factory factory) : IClassFixture<StepUpTest
     [Fact]
     public async Task Read_write_token_can_call_write_tool()
     {
-        var response = await PostMcp(Token("Todos.Read Todos.Write"), ToolsCall("add_todo", """{"title":"Buy milk"}"""));
+        var response = await PostMcp(Token("Todos.Read Todos.Write"), ToolsCall("add_todo", """{"tenantId":"contoso","title":"Buy milk"}"""));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("Buy milk", await response.Content.ReadAsStringAsync());
@@ -99,7 +105,7 @@ public class StepUpTests(StepUpTests.Factory factory) : IClassFixture<StepUpTest
     [Fact]
     public async Task Lying_Mcp_Name_header_does_not_bypass_step_up()
     {
-        var response = await PostMcp(Token("Todos.Read"), ToolsCall("add_todo", """{"title":"Sneaky"}"""),
+        var response = await PostMcp(Token("Todos.Read"), ToolsCall("add_todo", """{"tenantId":"contoso","title":"Sneaky"}"""),
             request =>
             {
                 request.Headers.Add("MCP-Protocol-Version", "2025-11-25"); // older version: SDK won't cross-check headers
@@ -108,6 +114,76 @@ public class StepUpTests(StepUpTests.Factory factory) : IClassFixture<StepUpTest
             });
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_sees_admin_tool()
+    {
+        var response = await PostMcp(Token("Todos.Read", role: "Todos.Admin"), ToolsList);
+
+        Assert.Contains("clear_all_todos", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Viewer_does_not_see_admin_tool()
+    {
+        var response = await PostMcp(Token("Todos.Read"), ToolsList);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.DoesNotContain("clear_all_todos", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Viewer_cannot_call_admin_tool_by_name()
+    {
+        var response = await PostMcp(Token("Todos.Read Todos.Write"), ToolsCall("clear_all_todos", """{"tenantId":"contoso"}"""));
+
+        Assert.DoesNotContain("\"removed\"", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Tenant_comes_from_the_token_not_the_model()
+    {
+        // Bob is in Fabrikam's group but asks for Contoso.
+        var response = await PostMcp(Token("Todos.Read", group: FabrikamGroup), ToolsCall("get_todos", """{"tenantId":"contoso"}"""));
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Fabrikam launch checklist", body);
+        Assert.DoesNotContain("Contoso", body);
+    }
+
+    [Fact]
+    public async Task Other_tenants_todo_is_not_found()
+    {
+        var contosoTodo = TodoStore.GetAll("contoso").First().Id;
+
+        var response = await PostMcp(Token("Todos.Read Todos.Write", group: FabrikamGroup),
+            ToolsCall("mark_todo_complete", $$"""{"tenantId":"contoso","id":{{contosoTodo}}}"""));
+
+        Assert.Contains($"Todo {contosoTodo} not found in tenant fabrikam", await response.Content.ReadAsStringAsync());
+        Assert.False(TodoStore.GetAll("contoso").First().IsComplete);
+    }
+
+    [Fact]
+    public async Task Audit_log_records_allows_and_denies()
+    {
+        var output = new StringWriter();
+        var original = Console.Out;
+        Console.SetOut(output);
+        try
+        {
+            await PostMcp(Token("Todos.Read", group: FabrikamGroup), ToolsCall("get_todos", """{"tenantId":"fabrikam"}"""));
+            await PostMcp(Token("Todos.Read Todos.Write", group: FabrikamGroup), ToolsCall("mark_todo_complete", """{"tenantId":"contoso","id":999}"""));
+        }
+        finally
+        {
+            Console.SetOut(original);
+        }
+
+        var log = output.ToString();
+        Assert.Contains("ALLOWED | Alice", log);
+        Assert.Contains("get_todos", log);
+        Assert.Contains("DENIED  Todo 999 not found in tenant fabrikam", log);
     }
 
     private const string ToolsList = """{"jsonrpc":"2.0","id":1,"method":"tools/list"}""";
@@ -131,11 +207,14 @@ public class StepUpTests(StepUpTests.Factory factory) : IClassFixture<StepUpTest
         return await factory.CreateClient().SendAsync(request);
     }
 
-    private static string Token(string scp) => new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+    private static string Token(string scp, string? role = null, string group = ContosoGroup) => new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
     {
         Issuer = $"https://login.microsoftonline.com/{TenantId}/v2.0",
         Audience = ClientId,
-        Subject = new ClaimsIdentity([new Claim("oid", "alice-oid"), new Claim("name", "Alice"), new Claim("scp", scp)]),
+        Subject = new ClaimsIdentity(
+            new[] { new Claim("oid", "alice-oid"), new Claim("name", "Alice"), new Claim("scp", scp) }
+                .Concat(role is null ? [] : [new Claim("roles", role)])
+                .Append(new Claim("groups", group))),
         SigningCredentials = new SigningCredentials(TestKey, SecurityAlgorithms.HmacSha256),
     });
 }

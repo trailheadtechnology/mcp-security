@@ -37,11 +37,13 @@ public static class EntraAuthShim
         });
 
         // 3a. Authorize proxy: drop "resource", redirect the browser to Entra.
+        // prompt=select_account shows the account picker every time, so switching demo users is one click.
         group.MapGet("/authorize", (HttpRequest request, IOptions<EntraOptions> options) =>
         {
             var query = request.Query
-                .Where(kv => kv.Key != "resource")
-                .Select(kv => $"{Uri.EscapeDataString(kv.Key)}={Uri.EscapeDataString(kv.Value.ToString())}");
+                .Where(kv => kv.Key is not ("resource" or "prompt"))
+                .Select(kv => $"{Uri.EscapeDataString(kv.Key)}={Uri.EscapeDataString(kv.Value.ToString())}")
+                .Append("prompt=select_account");
             return Results.Redirect($"{options.Value.AuthorizeEndpoint}?{string.Join("&", query)}");
         });
 

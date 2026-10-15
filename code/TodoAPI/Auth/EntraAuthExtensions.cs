@@ -17,6 +17,8 @@ namespace TodoAPI.Auth;
 ///   - Expose an API: App ID URI api://{client-id}, scope "Todos.Access" (admins and users),
 ///     and the app's own client id added under "Authorized client applications"
 ///   - Manifest: requestedAccessTokenVersion = 2
+///   - App roles: "Todos.Admin" (member type Users/Groups), assigned to the admin demo user under
+///       Enterprise applications > Users and groups. The viewer demo user gets no role.
 /// </summary>
 public static class EntraAuthExtensions
 {
@@ -44,6 +46,7 @@ public static class EntraAuthExtensions
                     // Accept both so the demo doesn't hinge on that setting.
                     ValidIssuers = [entra.Issuer, $"https://sts.windows.net/{entra.TenantId}/"],
                     ValidAudiences = [entra.ClientId, $"api://{entra.ClientId}"],
+                    RoleClaimType = "roles", // Entra app roles, for [Authorize(Roles = ...)]
                 };
             })
             // On 401, tells MCP clients where to find the protected resource metadata (RFC 9728),
