@@ -9,7 +9,7 @@ namespace TodoAPI.Auth;
 /// </summary>
 public sealed class TenantResolver(IConfiguration config)
 {
-    public string Resolve(ClaimsPrincipal user, string requestedTenant)
+    public string Resolve(ClaimsPrincipal? user, string requestedTenant)
     {
         var tenant = requestedTenant;
 
@@ -20,8 +20,9 @@ public sealed class TenantResolver(IConfiguration config)
         return tenant;
     }
 
-    private string FromToken(ClaimsPrincipal user)
+    private string FromToken(ClaimsPrincipal? user)
     {
+        if (user is null) throw new McpException("Sign in first: the tenant comes from your token.");
         var groups = user.FindAll("groups").Select(c => c.Value).ToHashSet();
         return config.GetSection("Tenants").GetChildren().FirstOrDefault(t => groups.Contains(t.Value ?? ""))?.Key
             ?? throw new McpException("You aren't a member of any tenant.");

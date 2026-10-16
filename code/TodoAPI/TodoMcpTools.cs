@@ -8,7 +8,7 @@ using TodoAPI.Auth;
 using TodoMcp.Shared;
 
 // Every tool takes a tenantId from the model, then asks TenantResolver which tenant it really gets (demo 3).
-// ClaimsPrincipal and TenantResolver are injected by the SDK and never appear in the tool schema.
+// ClaimsPrincipal (null when auth is off) and TenantResolver are injected by the SDK and never appear in the tool schema.
 [McpServerToolType]
 public static class TodoMcpTools
 {
@@ -16,23 +16,25 @@ public static class TodoMcpTools
 
     [McpServerTool]
     [Description("Show who the server thinks is calling: name, roles, groups, and scopes from the access token.")]
-    public static string WhoAmI(ClaimsPrincipal user) => JsonSerializer.Serialize(new
-    {
-        name = user.FindFirst("name")?.Value ?? user.FindFirst("preferred_username")?.Value,
-        isAdmin = user.IsInRole("Todos.Admin"),
-        roles = user.FindAll("roles").Select(c => c.Value),
-        groups = user.FindAll("groups").Select(c => c.Value),
-        scopes = user.FindFirst("scp")?.Value,
-    });
+    public static string WhoAmI(ClaimsPrincipal? user = null) => user is null
+        ? JsonSerializer.Serialize(new { name = "anonymous (no token)" })
+        : JsonSerializer.Serialize(new
+        {
+            name = user.FindFirst("name")?.Value ?? user.FindFirst("preferred_username")?.Value,
+            isAdmin = user.IsInRole("Todos.Admin"),
+            roles = user.FindAll("roles").Select(c => c.Value),
+            groups = user.FindAll("groups").Select(c => c.Value),
+            scopes = user.FindFirst("scp")?.Value,
+        });
 
     [McpServerTool]
     [Description("Get a tenant's todos. Can optionally filter by completion status.")]
     public static string GetTodos(
         TenantResolver tenants,
-        ClaimsPrincipal user,
         [Description(TenantDescription)] string tenantId,
         [Description("Filter by completion status: true for completed items, false for incomplete items, or omit to get all items")]
-        bool? isComplete = null)
+        bool? isComplete = null,
+        ClaimsPrincipal? user = null)
     {
         var tenant = tenants.Resolve(user, tenantId);
         return JsonSerializer.Serialize(new { tenant, todos = TodoStore.GetAll(tenant, isComplete) });
@@ -43,9 +45,9 @@ public static class TodoMcpTools
     [Description("Add a single todo to a tenant's list.")]
     public static string AddTodo(
         TenantResolver tenants,
-        ClaimsPrincipal user,
         [Description(TenantDescription)] string tenantId,
-        [Description("The title of the todo to add")] string title)
+        [Description("The title of the todo to add")] string title,
+        ClaimsPrincipal? user = null)
     {
         var added = TodoStore.Add(tenants.Resolve(user, tenantId), title);
         return JsonSerializer.Serialize(added);
@@ -56,9 +58,9 @@ public static class TodoMcpTools
     [Description("Add multiple todos to a tenant's list at once. Use this when the user wants to add several items. Provide a JSON array of title strings.")]
     public static string AddMultipleTodos(
         TenantResolver tenants,
-        ClaimsPrincipal user,
         [Description(TenantDescription)] string tenantId,
-        [Description("JSON array of todo titles, e.g. [\"Buy milk\", \"Walk dog\", \"Send email\"]")] string titlesJson)
+        [Description("JSON array of todo titles, e.g. [\"Buy milk\", \"Walk dog\", \"Send email\"]")] string titlesJson,
+        ClaimsPrincipal? user = null)
     {
         var tenant = tenants.Resolve(user, tenantId);
         var titles = JsonSerializer.Deserialize<string[]>(titlesJson) ?? Array.Empty<string>();
@@ -70,9 +72,9 @@ public static class TodoMcpTools
     [McpServerTool, Description("Mark a todo item as complete.")]
     public static string MarkTodoComplete(
         TenantResolver tenants,
-        ClaimsPrincipal user,
         [Description(TenantDescription)] string tenantId,
-        [Description("The ID of the todo to mark as complete")] int id)
+        [Description("The ID of the todo to mark as complete")] int id,
+        ClaimsPrincipal? user = null)
     {
         var tenant = tenants.Resolve(user, tenantId);
         var updated = TodoStore.MarkComplete(tenant, id) ?? throw new McpException($"Todo {id} not found in tenant {tenant}");
@@ -84,9 +86,9 @@ public static class TodoMcpTools
     [Description("Mark a todo item as incomplete (not done).")]
     public static string MarkTodoIncomplete(
         TenantResolver tenants,
-        ClaimsPrincipal user,
         [Description(TenantDescription)] string tenantId,
-        [Description("The ID of the todo to mark as incomplete")] int id)
+        [Description("The ID of the todo to mark as incomplete")] int id,
+        ClaimsPrincipal? user = null)
     {
         var tenant = tenants.Resolve(user, tenantId);
         var updated = TodoStore.MarkIncomplete(tenant, id) ?? throw new McpException($"Todo {id} not found in tenant {tenant}");
@@ -102,8 +104,8 @@ public static class TodoMcpTools
     [Description("Delete every todo on a tenant's list.")]
     public static string ClearAllTodos(
         TenantResolver tenants,
-        ClaimsPrincipal user,
-        [Description(TenantDescription)] string tenantId)
+        [Description(TenantDescription)] string tenantId,
+        ClaimsPrincipal? user = null)
     {
         var tenant = tenants.Resolve(user, tenantId);
         return JsonSerializer.Serialize(new { tenant, removed = TodoStore.Clear(tenant) });
