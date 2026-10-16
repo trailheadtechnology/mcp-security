@@ -76,10 +76,10 @@ Seed data: Contoso has todos 1–2, Fabrikam has 3–4. Each restart reseeds.
 Switch back to Bob (Fabrikam) first.
 
 1. "list Contoso's todos": Bob gets Contoso's list. The model picked the tenant.
-2. Uncomment `tenant = FromToken(user);` and `mcpServer.WithAuditLog();`, save, `/mcp` → **Reconnect**.
-3. "list Contoso's todos" again: the reply says `tenant: fabrikam`. The model still sends `contoso`; nobody listens.
-4. "mark todo 1 complete": not found in tenant fabrikam. Todo 1 is Contoso's.
-5. Terminal 1: an `ALLOWED` line, then a `DENIED` line, each with Bob's name, the agent, the tool, and the arguments.
+2. Uncomment `tenant = FromToken(user, requestedTenant);` and `mcpServer.WithAuditLog();`, save, `/mcp` → **Reconnect**.
+3. "list Contoso's todos" again: denied, "Bob is in fabrikam, not contoso". The model still sends `contoso`; the token wins.
+4. "list my todos": Fabrikam's list (3–4).
+5. Terminal 1: a `DENIED` line for the Contoso attempt, then an `ALLOWED` line, each with Bob's name, the agent, the tool, and the arguments.
 
 `[Authorize]` rejections (demo 2) happen before the audit filter, so they don't appear in the log.
 

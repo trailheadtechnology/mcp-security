@@ -148,19 +148,27 @@ public class StepUpTests(StepUpTests.Factory factory) : IClassFixture<StepUpTest
         var response = await PostMcp(Token("Todos.Read", group: FabrikamGroup), ToolsCall("get_todos", """{"tenantId":"contoso"}"""));
 
         var body = await response.Content.ReadAsStringAsync();
-        Assert.Contains("Fabrikam launch checklist", body);
-        Assert.DoesNotContain("Contoso", body);
+        Assert.Contains("Alice is in fabrikam, not contoso", body);
+        Assert.DoesNotContain("Contoso support contract", body);
     }
 
     [Fact]
-    public async Task Other_tenants_todo_is_not_found()
+    public async Task Own_tenant_is_allowed()
+    {
+        var response = await PostMcp(Token("Todos.Read", group: FabrikamGroup), ToolsCall("get_todos", """{"tenantId":"fabrikam"}"""));
+
+        Assert.Contains("Fabrikam launch checklist", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Other_tenants_todo_cannot_be_changed()
     {
         var contosoTodo = TodoStore.GetAll("contoso").First().Id;
 
         var response = await PostMcp(Token("Todos.Read Todos.Write", group: FabrikamGroup),
             ToolsCall("mark_todo_complete", $$"""{"tenantId":"contoso","id":{{contosoTodo}}}"""));
 
-        Assert.Contains($"Todo {contosoTodo} not found in tenant fabrikam", await response.Content.ReadAsStringAsync());
+        Assert.Contains("Alice is in fabrikam, not contoso", await response.Content.ReadAsStringAsync());
         Assert.False(TodoStore.GetAll("contoso").First().IsComplete);
     }
 
@@ -183,7 +191,7 @@ public class StepUpTests(StepUpTests.Factory factory) : IClassFixture<StepUpTest
         var log = output.ToString();
         Assert.Contains("ALLOWED | Alice", log);
         Assert.Contains("get_todos", log);
-        Assert.Contains("DENIED  Todo 999 not found in tenant fabrikam", log);
+        Assert.Contains("DENIED  Alice is in fabrikam, not contoso", log);
     }
 
     private const string ToolsList = """{"jsonrpc":"2.0","id":1,"method":"tools/list"}""";
